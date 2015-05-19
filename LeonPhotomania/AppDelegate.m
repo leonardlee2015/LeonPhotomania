@@ -7,39 +7,133 @@
 //
 
 #import "AppDelegate.h"
+#import "FlickrFetcher.h"
+#import "Photo+Flickr.h"
+#import "Photographer+create.h"
+#import <CoreData/CoreData.h>
 
-@interface AppDelegate ()
+#define FLICKR_BACKGROUND_FETCH @"flick background fetch"
 
+@interface AppDelegate ()<NSURLSessionDownloadDelegate>
+@property(nonatomic, strong) NSManagedObjectContext *photoMananagedObjectContext;
+@property(nonatomic, strong) UIManagedDocument *ManagedDocument;
+@property(nonatomic, strong) NSURLSession *flickerFecthSession;
 @end
 
 @implementation AppDelegate
-
+#pragma mark - UIApplicationDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     // Override point for customization after application launch.
     return YES;
 }
 
-- (void)applicationWillResignActive:(UIApplication *)application {
-    // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
-    // Use this method to pause ongoing tasks, disable timers, and throttle down OpenGL ES frame rates. Games should use this method to pause the game.
+
+
+
+#pragma mark - Data Internet Fetching
+-(void)startFlickrFetch
+{
+    if (self.photoMananagedObjectContext) {
+        [self.flickerFecthSession getTasksWithCompletionHandler:^(NSArray *dataTasks, NSArray *uploadTasks, NSArray *downloadTasks) {
+            if (![downloadTasks count]) {
+                NSURL *url = [FlickrFetcher URLforRecentGeoreferencedPhotos];
+                NSURLSessionDownloadTask *task = [self.flickerFecthSession downloadTaskWithURL:url];
+                task.taskDescription =FLICKR_BACKGROUND_FETCH;
+                [task resume];
+            }else{
+                for (NSURLSessionDownloadTask *task in downloadTasks) {
+                    [task resume];
+                }
+            }
+        }];
+    }
 }
 
-- (void)applicationDidEnterBackground:(UIApplication *)application {
-    // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
-    // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+-(NSURLSession *)flickerFecthSession{
+   
+    if (!_flickerFecthSession) {
+        
+        static dispatch_once_t once;
+        dispatch_once(&once, ^{
+            NSURLSessionConfiguration *sessionConfig = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:FLICKR_BACKGROUND_FETCH];
+            _flickerFecthSession = [NSURLSession sessionWithConfiguration:sessionConfig
+                                                                 delegate:self delegateQueue:nil];
+            
+        });
+        
+    
+    }
+    return _flickerFecthSession;
 }
 
-- (void)applicationWillEnterForeground:(UIApplication *)application {
-    // Called as part of the transition from the background to the inactive state; here you can undo many of the changes made on entering the background.
+-(void)downloadFlickrPhotoFromLocalURL:(NSURL*)localfile intoManagedContext:(NSManagedObjectContext*) context{
+    NSData *jsonData = [NSData dataWithContentsOfURL:localfile];
+    
+    NSDictionary *flickrPropertyList;
+    if (jsonData) {
+        flickrPropertyList = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:NULL];
+        
+        [Photo loadPotoFromPotolist:flickrPropertyList[FLICKR_RESULTS_PHOTOS] intoManagedContext:context];
+        [context save:NULL];
+        
+        [self downloadTaskCompelete];
+    }
+    
+    
 }
 
-- (void)applicationDidBecomeActive:(UIApplication *)application {
-    // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+#pragma mark - Core Data
+
+-(void)CreateManangedDocument
+{
+    NSURL *url = [[self documentDirectoryUrl] URLByAppendingPathComponent:@"Photomania.md"];
+    UIManagedDocument *document = [[UIManagedDocument alloc]initWithFileURL:url];
+    self.ManagedDocument = document;
+    
+    // set document to be auto save.
+    document.persistentStoreOptions = @{NSMigratePersistentStoresAutomaticallyOption: [NSNumber numberWithBool:YES], NSInferMappingModelAutomaticallyOption:[NSNumber numberWithBool:YES]};
+    
+    if (![[NSFileManager defaultManager]fileExistsAtPath:[url path]]) {
+        [document saveToURL:url forSaveOperation:UIDocumentSaveForCreating completionHandler:^(BOOL success) {
+            if (success) {
+                self.photoMananagedObjectContext = document.managedObjectContext;
+                [self startFlickrFetch];
+            }else{
+                NSLog(@" Saves document data to the specified location in the application sandbox failed!");
+            }
+        }];
+        
+    }else if (document.documentState == UIDocumentStateClosed){
+        
+        [document openWithCompletionHandler:^(BOOL success) {
+            if (success) {
+                self.photoMananagedObjectContext = document.managedObjectContext;
+                [self startFlickrFetch];
+            }else{
+                NSLog(@" Opens a document asynchronously. failed!");
+            }
+        }];
+    }else{
+        self.photoMananagedObjectContext = document.managedObjectContext;
+        [self startFlickrFetch];
+    }
 }
 
-- (void)applicationWillTerminate:(UIApplication *)application {
-    // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
+-(NSURL *)documentDirectoryUrl
+{
+    return [[[NSFileManager defaultManager]URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask]lastObject];
 }
 
+#pragma mark - NSURLSessionDownloadDelegate
+-(void)URLSession:(NSURLSession *)session downloadTask:(NSURLSessionDownloadTask *)downloadTask didFinishDownloadingToURL:(NSURL *)location{
+    if ([downloadTask.taskDescription isEqualToString:FLICKR_BACKGROUND_FETCH]) {
+        [self downloadFlickrPhotoFromLocalURL:location intoManagedContext:self.photoMananagedObjectContext];
+    }
+    
+}
+
+-(void)downloadTaskCompelete{
+    
+}
 @end

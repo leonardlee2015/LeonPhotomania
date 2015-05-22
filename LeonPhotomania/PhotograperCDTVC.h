@@ -1,18 +1,13 @@
 //
-//  Photographer.m
+//  PhotograperCDTVC.h
 //  LeonPhotomania
 //
 //  Created by 李南 on 15/5/22.
 //  Copyright (c) 2015年 ctd.leonard. All rights reserved.
 //
 
-#import "Photographer.h"
-#import "Photo.h"
+#import "CoreDataTableViewController.h"
 
-
-@implementation Photographer
-
-@dynamic name;
-@dynamic photos;
+@interface PhotograperCDTVC : CoreDataTableViewController
 
 @end

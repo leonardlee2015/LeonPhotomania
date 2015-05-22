@@ -37,8 +37,8 @@
             photo.subtitle = PhotoInfo[FLICKR_PHOTO_DESCRIPTION];
             photo.imageURL = [[FlickrFetcher URLforPhoto:PhotoInfo format:FlickrPhotoFormatLarge]absoluteString];
             photo.thumbnailURL = [[FlickrFetcher URLforPhoto:PhotoInfo format:FlickrPhotoFormatSquare]absoluteString];
-            photo.longitude = PhotoInfo[FLICKR_LONGITUDE];
-            photo.latitube = PhotoInfo[FLICKR_LATITUDE];
+            photo.longitude = [NSNumber numberWithDouble:[(NSString*)PhotoInfo[FLICKR_LONGITUDE] doubleValue]];
+            photo.latitube = [NSNumber numberWithDouble: [(NSString*)PhotoInfo[FLICKR_LATITUDE] doubleValue]];
             
             photo.whoTok = [Photographer PhotographerWithName:[PhotoInfo[FLICKR_PHOTO_OWNER] description] inManagedContext:context];
             
@@ -50,6 +50,7 @@
 }
 +(void)loadPotoFromPotolist:(NSArray *)photolist intoManagedContext:(NSManagedObjectContext *)context
 {
+    
     for (NSDictionary *photoInfo in photolist) {
         [Photo photoWithPhotoInfo:photoInfo inManagedContext:context];
     }
